@@ -83,8 +83,21 @@ def build_index(rallies, patches, calendar):
     total_photos = sum(r.get("photo_count", 0) for r in rallies)
 
     # Slim list for the rallies browse page (no photos array)
-    rallies_list = [
-        {
+    # Read lat/lng from already-geocoded meta.json files (geocode_rallies.py writes these)
+    rallies_dir = DATA_DIR / "rallies"
+    rallies_list = []
+    for r in rallies:
+        slug = r["slug"].replace("/", "-")
+        lat = lng = None
+        meta_path = rallies_dir / slug / "meta.json"
+        if meta_path.exists():
+            try:
+                saved = json.loads(meta_path.read_text(encoding="utf-8"))
+                lat = saved.get("lat")
+                lng = saved.get("lng")
+            except Exception:
+                pass
+        rallies_list.append({
             "slug": r["slug"],
             "title": r.get("title", ""),
             "year": r.get("year"),
@@ -92,9 +105,9 @@ def build_index(rallies, patches, calendar):
             "date_rally": r.get("date_rally"),
             "photo_count": r.get("photo_count", 0),
             "url": r.get("url", ""),
-        }
-        for r in rallies
-    ]
+            "lat": lat,
+            "lng": lng,
+        })
 
     index = {
         "rallies": len(rallies),
