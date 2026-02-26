@@ -35,7 +35,7 @@ html { scroll-behavior: smooth; }
 body {
   background-color: var(--bg);
   color: var(--cream);
-  font-family: var(--font-mono);
+  font-family: var(--font-label);
   font-size: 14px;
   line-height: 1.7;
   min-height: 100vh;

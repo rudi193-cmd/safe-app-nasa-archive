@@ -3,11 +3,11 @@ import Base from '../../layouts/Base.astro';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-const DATA_DIR = 'C:/Users/Sean/Documents/GitHub/nasa-archive/data/rallies';
+const DATA_DIR = join(process.cwd(), '..', 'data', 'rallies');
 
 // Build static paths from available rally directories
 export async function getStaticPaths() {
-  const RALLIES_DIR = 'C:/Users/Sean/Documents/GitHub/nasa-archive/data/rallies';
+  const RALLIES_DIR = join(process.cwd(), '..', 'data', 'rallies');
   try {
     return readdirSync(RALLIES_DIR)
       .filter(name => statSync(join(RALLIES_DIR, name)).isDirectory())
