@@ -1,0 +1,86 @@
+---
+// SafeConsentBanner.astro
+// SAFE OS session consent — calls Willow API, falls back to localStorage-only
+// in production (when Willow server is not available).
+const WILLOW_API = import.meta.env.PUBLIC_WILLOW_API ?? 'http://localhost:8420';
+---
+
+<div id="safe-consent-banner" class="fixed bottom-0 left-0 right-0 bg-orange-500 text-black p-4 z-50 hidden">
+  <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <p class="font-bold text-sm">
+      <span class="font-mono text-xs bg-black text-orange-400 px-2 py-0.5 mr-2">SAFE OS</span>
+      Session Consent Required — this site preserves community memory. Your session is authorized once per 4 hours.
+    </p>
+    <div class="flex gap-3 shrink-0">
+      <button id="safe-revoke-btn"
+              class="bg-black text-white px-5 py-2 text-xs font-mono border-2 border-black hover:bg-white hover:text-black transition-colors">
+        REVOKE ALL
+      </button>
+      <button id="safe-grant-btn"
+              class="bg-white px-7 py-2 text-sm font-bold border-2 border-black hover:bg-orange-600 hover:text-white transition-colors">
+        AUTHORIZE THIS SESSION →
+      </button>
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ WILLOW_API }}>
+  const CONSENT_KEY = 'safe-consent-token';
+  const TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+  function getStoredConsent() {
+    try {
+      const raw = localStorage.getItem(CONSENT_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw); // {token, expires}
+    } catch { return null; }
+  }
+
+  function isConsentActive() {
+    const c = getStoredConsent();
+    return c && new Date(c.expires) > new Date();
+  }
+
+  async function grantConsent() {
+    const token = crypto.randomUUID();
+    const expires = new Date(Date.now() + TTL_MS).toISOString();
+
+    // Call Willow API (best-effort — don't block UX if offline)
+    try {
+      await fetch(`${WILLOW_API}/api/safe/consent/grant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: token, scope: 'web' }),
+        signal: AbortSignal.timeout(2000),
+      });
+    } catch (_) { /* Willow offline — consent is still valid locally */ }
+
+    localStorage.setItem(CONSENT_KEY, JSON.stringify({ token, expires }));
+    document.getElementById('safe-consent-banner').classList.add('hidden');
+  }
+
+  async function revokeConsent() {
+    const c = getStoredConsent();
+    if (c?.token) {
+      try {
+        await fetch(`${WILLOW_API}/api/safe/consent/revoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: c.token }),
+          signal: AbortSignal.timeout(2000),
+        });
+      } catch (_) {}
+    }
+    localStorage.removeItem(CONSENT_KEY);
+    window.location.reload();
+  }
+
+  // Wire buttons
+  document.getElementById('safe-grant-btn').addEventListener('click', grantConsent);
+  document.getElementById('safe-revoke-btn').addEventListener('click', revokeConsent);
+
+  // Show banner if no active consent
+  if (!isConsentActive()) {
+    document.getElementById('safe-consent-banner').classList.remove('hidden');
+  }
+</script>

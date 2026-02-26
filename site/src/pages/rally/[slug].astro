@@ -1,18 +1,21 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-const DATA_DIR = join(process.cwd(), '..', 'data', 'rallies');
+const DATA_DIR = 'C:/Users/Sean/Documents/GitHub/nasa-archive/data/rallies';
 
 // Build static paths from available rally directories
 export async function getStaticPaths() {
-  let paths = [];
+  const RALLIES_DIR = 'C:/Users/Sean/Documents/GitHub/nasa-archive/data/rallies';
   try {
-    const dirs = readdirSync(DATA_DIR);
-    paths = dirs.map(slug => ({ params: { slug } }));
-  } catch (e) {}
-  return paths;
+    return readdirSync(RALLIES_DIR)
+      .filter(name => statSync(join(RALLIES_DIR, name)).isDirectory())
+      .map(slug => ({ params: { slug } }));
+  } catch (e) {
+    console.error('[getStaticPaths] Failed to read rally dirs:', e.message);
+    return [];
+  }
 }
 
 const { slug } = Astro.params;
