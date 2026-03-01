@@ -330,7 +330,7 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
 </Base>
 
 <script>
-  import { supabase } from '../../lib/supabase';
+  const WILLOW_API = import.meta.env.PUBLIC_WILLOW_API ?? 'http://localhost:8420';
   const slug = (document.getElementById('oral-history-root') as HTMLElement)?.dataset.slug ?? '';
   const rallyTitle = document.querySelector('h1')?.textContent ?? slug;
 
@@ -446,23 +446,23 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
 
   document.getElementById('contribute-yes')?.addEventListener('click', async () => {
     const statusEl = document.getElementById('contribute-status')!;
-    statusEl.textContent = 'Uploading...';
+    statusEl.textContent = 'Uploading to Willow...';
     statusEl.classList.remove('hidden');
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('nasa_contributions').insert({
-        rally_slug: slug,
-        user_id: user?.id ?? null,
-        photos_tagged: session.photos_tagged,
-        album_claim: session.album_claim,
-        oral_history: session.oral_history,
-        contributed_at: new Date().toISOString(),
+      const res = await fetch(`${WILLOW_API}/api/nasa/contribute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(session),
       });
-      session.contributed = true;
-      statusEl.textContent = 'Contributed. Thank you.';
-    } catch (err) {
-      statusEl.textContent = 'Upload failed — downloading locally only.';
+      if (res.ok) {
+        session.contributed = true;
+        statusEl.textContent = 'Contributed to Willow. Thank you.';
+      } else {
+        statusEl.textContent = 'Willow unavailable — downloading locally.';
+      }
+    } catch {
+      statusEl.textContent = 'Willow offline — downloading locally.';
     }
 
     downloadJson({ ...session, contributed: session.contributed }, `nasa-memory-${slug}-${Date.now()}.json`);
@@ -492,17 +492,10 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
   panel?.addEventListener('click', (e) => { if (e.target === panel) closePanel(); });
 
   // ── Auth check ──────────────────────────────────────────────
+  // Willow OAuth pending (#4) — show form directly for local testing
   async function checkAuth() {
-    const { data: { session } } = await supabase.auth.getSession();
-    const authPrompt = document.getElementById('story-auth-prompt');
-    const storyForm = document.getElementById('story-form');
-    if (session) {
-      authPrompt.classList.add('hidden');
-      storyForm.classList.remove('hidden');
-    } else {
-      storyForm.classList.add('hidden');
-      authPrompt.classList.remove('hidden');
-    }
+    document.getElementById('story-auth-prompt')?.classList.add('hidden');
+    document.getElementById('story-form')?.classList.remove('hidden');
   }
 
   // ── Story submission ────────────────────────────────────────
@@ -511,55 +504,40 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
     const msg = document.getElementById('story-message');
     const btn = e.target.querySelector('[type="submit"]');
 
-    const narratorName = document.getElementById('story-narrator-name').value.trim();
-    const content = document.getElementById('story-content').value.trim();
-    const correctionText = document.getElementById('story-corrections').value.trim();
+    const narratorName = (document.getElementById('story-narrator-name') as HTMLInputElement).value.trim();
+    const content = (document.getElementById('story-content') as HTMLTextAreaElement).value.trim();
+    const correctionText = (document.getElementById('story-corrections') as HTMLInputElement).value.trim();
 
     btn.textContent = 'Saving...';
     btn.disabled = true;
 
-    // Save narrator as a person first (upsert by club_name)
-    let narratorId = null;
-    const { data: existingPerson } = await supabase
-      .from('oral_persons')
-      .select('id')
-      .ilike('club_name', narratorName)
-      .maybeSingle();
+    try {
+      const res = await fetch(`${WILLOW_API}/api/nasa/story`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rally_slug: slug,
+          narrator_name: narratorName,
+          content,
+          correction: correctionText || null,
+          capture_date: new Date().toISOString().split('T')[0],
+        }),
+      });
 
-    if (existingPerson) {
-      narratorId = existingPerson.id;
-    } else {
-      const { data: newPerson } = await supabase
-        .from('oral_persons')
-        .insert({ club_name: narratorName })
-        .select('id')
-        .single();
-      narratorId = newPerson?.id;
-    }
-
-    const corrections = correctionText
-      ? [{ text: correctionText, date: new Date().toISOString().split('T')[0] }]
-      : [];
-
-    const { error } = await supabase.from('oral_stories').insert({
-      content,
-      archive_slug: slug,
-      narrator_id: narratorId,
-      source: 'oral',
-      capture_date: new Date().toISOString().split('T')[0],
-      capture_session: `web-${slug}-${Date.now()}`,
-      corrections,
-    });
-
-    if (error) {
-      msg.textContent = 'Error saving story: ' + error.message;
+      if (res.ok) {
+        msg.textContent = 'Story saved to Willow. Thank you.';
+        msg.className = 'mt-4 text-sm text-[#888]';
+        msg.classList.remove('hidden');
+        setTimeout(() => { closePanel(); loadStories(); }, 1500);
+      } else {
+        msg.textContent = 'Error saving story. Try again.';
+        msg.className = 'mt-4 text-sm text-[#CC4444]';
+        msg.classList.remove('hidden');
+      }
+    } catch {
+      msg.textContent = 'Willow offline — story not saved.';
       msg.className = 'mt-4 text-sm text-[#CC4444]';
       msg.classList.remove('hidden');
-    } else {
-      msg.textContent = 'Story saved. Thank you.';
-      msg.className = 'mt-4 text-sm text-[#888]';
-      msg.classList.remove('hidden');
-      setTimeout(() => { closePanel(); loadStories(); }, 1500);
     }
 
     btn.textContent = 'Save Story';
@@ -568,45 +546,37 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
 
   // ── Load stories ────────────────────────────────────────────
   async function loadStories() {
-    const container = document.getElementById('stories-container');
-    const loading = document.getElementById('stories-loading');
+    const container = document.getElementById('stories-container')!;
 
-    const { data: stories, error } = await supabase
-      .from('oral_stories')
-      .select(`
-        id, content, capture_date, corrections, source,
-        narrator:oral_persons(club_name)
-      `)
-      .eq('archive_slug', slug)
-      .order('capture_date', { ascending: false });
+    try {
+      const res = await fetch(`${WILLOW_API}/api/nasa/stories?rally=${encodeURIComponent(slug)}`);
+      if (!res.ok) throw new Error('no stories');
+      const stories: { narrator_name: string; content: string; capture_date: string; correction?: string }[] = await res.json();
 
-    if (error || !stories?.length) {
+      if (!stories?.length) throw new Error('empty');
+
+      container.innerHTML = stories.map(s => `
+        <div class="border border-[#222] p-5 mb-4 hover:border-[#333] transition-colors">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="text-[#CC4444] text-xs font-medium uppercase tracking-wider">
+              ${escapeHtml(s.narrator_name || 'Anonymous')}
+            </span>
+            <span class="text-[#333] text-xs">${s.capture_date || ''}</span>
+          </div>
+          <p class="text-[#aaa] text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(s.content)}</p>
+          ${s.correction ? `
+            <div class="mt-3 pt-3 border-t border-[#1a1a1a]">
+              <div class="text-xs text-[#555] italic">Correction: ${escapeHtml(s.correction)}</div>
+            </div>` : ''}
+        </div>
+      `).join('');
+    } catch {
       container.innerHTML = `
         <div class="text-center py-8 text-[#444] text-sm">
           <p>No stories yet for this rally.</p>
           <p class="text-xs mt-1">Be the first to share what you remember.</p>
         </div>`;
-      return;
     }
-
-    container.innerHTML = stories.map(s => `
-      <div class="border border-[#222] p-5 mb-4 hover:border-[#333] transition-colors">
-        <div class="flex items-baseline gap-3 mb-3">
-          <span class="text-[#CC4444] text-xs font-medium uppercase tracking-wider">
-            ${s.narrator?.club_name || 'Anonymous'}
-          </span>
-          <span class="text-[#333] text-xs">${s.capture_date || ''}</span>
-        </div>
-        <p class="text-[#aaa] text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(s.content)}</p>
-        ${s.corrections?.length ? `
-          <div class="mt-3 pt-3 border-t border-[#1a1a1a]">
-            ${s.corrections.map(c => `
-              <div class="text-xs text-[#555] italic">
-                Correction: ${escapeHtml(c.text || JSON.stringify(c))}
-              </div>`).join('')}
-          </div>` : ''}
-      </div>
-    `).join('');
   }
 
   function escapeHtml(str) {
@@ -624,7 +594,7 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
   const chatMessages = document.getElementById('chat-messages')!;
   const chatInput = document.getElementById('chat-input') as HTMLInputElement;
   const chatSend = document.getElementById('chat-send')!;
-  const SUPABASE_URL = 'https://ugsqthkacqebvbatitco.supabase.co';
+  const ORAL_CHAT_URL = import.meta.env.PUBLIC_ORAL_CHAT_URL ?? 'https://ugsqthkacqebvbatitco.supabase.co';
 
   let chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
@@ -660,7 +630,7 @@ const dateLabel = meta.date_rally || (meta.year ? String(meta.year) : 'Unknown d
     chatHistory.push({ role: 'user', content: message });
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/oral-chat`, {
+      const res = await fetch(`${ORAL_CHAT_URL}/functions/v1/oral-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, slug, history: chatHistory.slice(-8) }),
