@@ -4,3 +4,4 @@ __pycache__/
 scraper/output/
 downloader/output/
 .DS_Store
+.env.local
