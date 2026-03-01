@@ -1,122 +1,85 @@
 ---
 // SafeConsentBanner.astro
-// SAFE OS session consent — user-selectable duration (this tab / 1h / 4h / 12h / 24h)
-// Calls Willow API, falls back to localStorage/sessionStorage-only when offline.
+// SAFE OS auth check — replaces per-session consent gate with Willow-issued token verify.
+// If token valid → shows "Logged in as [display_name]" strip.
+// If invalid/expired → redirects to SAFE login page with ?next= current URL.
 const WILLOW_API = import.meta.env.PUBLIC_WILLOW_API ?? 'http://localhost:8420';
+const LOGIN_URL = import.meta.env.PUBLIC_SAFE_LOGIN_URL ?? 'http://localhost:8420/SAFE/web/login.html';
 ---
 
-<div id="safe-consent-banner" class="fixed bottom-0 left-0 right-0 bg-orange-500 text-black p-4 z-50 hidden">
-  <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-    <p class="font-bold text-sm">
-      <span class="font-mono text-xs bg-black text-orange-400 px-2 py-0.5 mr-2">SAFE OS</span>
-      Session Consent Required — this site preserves community memory.
-    </p>
-    <div class="flex items-center gap-3 shrink-0 flex-wrap">
-      <div class="flex items-center gap-1 text-xs font-mono">
-        <span class="font-bold mr-1 shrink-0">Keep active:</span>
-        {[
-          { value: '0',  label: 'This tab' },
-          { value: '1',  label: '1h' },
-          { value: '4',  label: '4h' },
-          { value: '12', label: '12h' },
-          { value: '24', label: '24h' },
-        ].map(({ value, label }) => (
-          <label class="cursor-pointer">
-            <input type="radio" name="safe-duration" value={value} class="sr-only peer"
-                   checked={value === '4' ? true : undefined} />
-            <span class="px-2 py-1 border border-black peer-checked:bg-black peer-checked:text-orange-400 hover:bg-black hover:text-orange-400 transition-colors select-none">
-              {label}
-            </span>
-          </label>
-        ))}
-      </div>
-      <button id="safe-revoke-btn"
-              class="bg-black text-white px-5 py-2 text-xs font-mono border-2 border-black hover:bg-white hover:text-black transition-colors">
-        REVOKE
-      </button>
-      <button id="safe-grant-btn"
-              class="bg-white px-7 py-2 text-sm font-bold border-2 border-black hover:bg-orange-600 hover:text-white transition-colors">
-        AUTHORIZE →
-      </button>
-    </div>
-  </div>
+<!-- Auth strip: hidden by default, shown when logged in -->
+<div id="safe-auth-strip" class="hidden fixed bottom-0 left-0 right-0 bg-black text-orange-400 border-t border-orange-500 px-4 py-1.5 z-50 font-mono text-xs flex items-center justify-between">
+  <span>
+    <span class="text-orange-500 font-bold mr-2">SAFE OS</span>
+    Logged in as <span id="safe-display-name" class="font-bold"></span>
+  </span>
+  <span class="text-gray-600" id="safe-expires-label"></span>
 </div>
 
-<script define:vars={{ WILLOW_API }}>
-  const CONSENT_KEY = 'safe-consent-token';
+<script define:vars={{ WILLOW_API, LOGIN_URL }}>
+  const AUTH_KEY = 'willow-auth-token';
 
-  function getStoredConsent() {
+  function getStoredAuth() {
     try {
-      // Tab-only: sessionStorage (clears when tab closes)
-      const sess = sessionStorage.getItem(CONSENT_KEY);
+      const sess = sessionStorage.getItem(AUTH_KEY);
       if (sess) return { tabOnly: true, ...JSON.parse(sess) };
-      // Persistent: localStorage with expiry
-      const raw = localStorage.getItem(CONSENT_KEY);
+      const raw = localStorage.getItem(AUTH_KEY);
       if (!raw) return null;
       return JSON.parse(raw);
     } catch { return null; }
   }
 
-  function isConsentActive() {
-    const c = getStoredConsent();
-    if (!c) return false;
-    if (c.tabOnly) return true; // sessionStorage entry = tab still open
-    return c.expires && new Date(c.expires) > new Date();
+  function redirectToLogin() {
+    const next = encodeURIComponent(window.location.href);
+    window.location.href = `${LOGIN_URL}?next=${next}`;
   }
 
-  async function grantConsent() {
-    const durInput = document.querySelector('input[name="safe-duration"]:checked');
-    const hours = durInput ? parseInt(durInput.value) : 4;
-    const tabOnly = hours === 0;
-    const token = crypto.randomUUID();
-    const expires = tabOnly ? null : new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+  async function checkAuth() {
+    const stored = getStoredAuth();
+    if (!stored?.token) {
+      redirectToLogin();
+      return;
+    }
 
-    // Notify Willow (best-effort — don't block UX if offline)
+    // Quick local expiry check before hitting the server
+    if (!stored.tabOnly && stored.expires_at) {
+      if (new Date(stored.expires_at) <= new Date()) {
+        localStorage.removeItem(AUTH_KEY);
+        redirectToLogin();
+        return;
+      }
+    }
+
+    // Verify with Willow (best-effort — trust local if offline)
     try {
-      await fetch(`${WILLOW_API}/api/safe/consent/grant`, {
+      const res = await fetch(`${WILLOW_API}/api/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: token,
-          scope: 'web',
-          duration_hours: tabOnly ? null : hours,
-        }),
-        signal: AbortSignal.timeout(2000),
+        body: JSON.stringify({ token: stored.token }),
+        signal: AbortSignal.timeout(3000),
       });
-    } catch (_) { /* Willow offline — consent valid locally */ }
-
-    const payload = JSON.stringify({ token, expires });
-    if (tabOnly) {
-      sessionStorage.setItem(CONSENT_KEY, payload);
-      localStorage.removeItem(CONSENT_KEY);
-    } else {
-      localStorage.setItem(CONSENT_KEY, payload);
-      sessionStorage.removeItem(CONSENT_KEY);
+      const data = await res.json();
+      if (!data.valid) {
+        localStorage.removeItem(AUTH_KEY);
+        sessionStorage.removeItem(AUTH_KEY);
+        redirectToLogin();
+        return;
+      }
+      // Show auth strip
+      document.getElementById('safe-display-name').textContent = data.display_name || data.username;
+      const exp = data.expires_at ? new Date(data.expires_at) : null;
+      if (exp) {
+        document.getElementById('safe-expires-label').textContent =
+          `expires ${exp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      document.getElementById('safe-auth-strip').classList.remove('hidden');
+    } catch {
+      // Willow offline — trust local token, show strip with stored display_name
+      const displayName = stored.display_name || stored.username || '?';
+      document.getElementById('safe-display-name').textContent = displayName;
+      document.getElementById('safe-auth-strip').classList.remove('hidden');
     }
-    document.getElementById('safe-consent-banner').classList.add('hidden');
   }
 
-  async function revokeConsent() {
-    const c = getStoredConsent();
-    if (c?.token) {
-      try {
-        await fetch(`${WILLOW_API}/api/safe/consent/revoke`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: c.token }),
-          signal: AbortSignal.timeout(2000),
-        });
-      } catch (_) {}
-    }
-    localStorage.removeItem(CONSENT_KEY);
-    sessionStorage.removeItem(CONSENT_KEY);
-    window.location.reload();
-  }
-
-  document.getElementById('safe-grant-btn').addEventListener('click', grantConsent);
-  document.getElementById('safe-revoke-btn').addEventListener('click', revokeConsent);
-
-  if (!isConsentActive()) {
-    document.getElementById('safe-consent-banner').classList.remove('hidden');
-  }
+  checkAuth();
 </script>
