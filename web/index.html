@@ -183,6 +183,31 @@ body { display: flex; flex-direction: column }
   transition: color 0.15s;
 }
 .bottom-line .credits a:hover { color: var(--red) }
+
+/* ── WELCOME ───────────────────────────────── */
+.welcome {
+  max-width: 540px;
+  text-align: center;
+  margin-top: 2rem;
+  animation: fadeUp 0.6s ease-out 0.15s both;
+}
+.welcome p {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: var(--warm-gray);
+  margin-bottom: 0.75rem;
+}
+.welcome .welcome-note {
+  font-family: var(--font-label);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warm-gray-light);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--cream-dim);
+}
 </style>
 </head>
 <body>
@@ -237,6 +262,22 @@ body { display: flex; flex-direction: column }
       </div>
       <span class="door-cta">Enter the BBS &rarr;</span>
     </a>
+  </div>
+
+  <div class="welcome">
+    <p>
+      This is a community archive &mdash; built by the people who were there.
+      By participating, you&rsquo;re helping the scooter community remember
+      its own history.
+    </p>
+    <p>
+      Your memories are always stored on your machine first. Nothing leaves
+      unless you choose to share it. If you do, it will be treated with the
+      care in which it was written.
+    </p>
+    <div class="welcome-note">
+      No accounts required to browse. No tracking. No ads. Just the record.
+    </div>
   </div>
 
   <div class="bottom-line">
