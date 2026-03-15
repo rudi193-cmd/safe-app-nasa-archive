@@ -538,7 +538,8 @@
     // Fetch enriched meta + photos in parallel
     var dirSlug = slug.replace(/\//g, '-');
 
-    fetch('data/rallies/' + dirSlug + '/meta.json')
+    var R2_DATA = 'https://pub-298bb0f2fc0a4462bd54d403b1bddbca.r2.dev/rallies/';
+    fetch(R2_DATA + dirSlug + '/meta.json')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (meta) {
         if (!meta) return;
@@ -594,7 +595,7 @@
       })
       .catch(function () { /* no meta, that's fine */ });
 
-    fetch('data/rallies/' + dirSlug + '/photos.json')
+    fetch(R2_DATA + dirSlug + '/photos.json')
       .then(function (r) {
         if (!r.ok) throw new Error(r.status);
         return r.json();

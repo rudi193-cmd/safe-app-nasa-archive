@@ -243,8 +243,9 @@
   document.body.dataset.slug = rallySlug;
 
   // Fetch photos.json and meta.json
-  var photosUrl = 'data/rallies/' + dirSlug + '/photos.json';
-  var metaUrl = 'data/rallies/' + dirSlug + '/meta.json';
+  var R2_DATA = 'https://pub-298bb0f2fc0a4462bd54d403b1bddbca.r2.dev/rallies/';
+  var photosUrl = R2_DATA + dirSlug + '/photos.json';
+  var metaUrl = R2_DATA + dirSlug + '/meta.json';
 
   // Load meta for rally context
   fetch(metaUrl)
