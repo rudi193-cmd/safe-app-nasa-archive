@@ -271,6 +271,8 @@ html, body {
   function addLine(text, cls) {
     var div = document.createElement('div');
     div.className = 'line' + (cls ? ' ' + cls : '');
+    // Use innerHTML only for our own trusted markup (static HTML defined in this file).
+    // Never pass user-supplied strings to addLine without escaping.
     div.innerHTML = text;
     body.appendChild(div);
     body.scrollTop = body.scrollHeight;
@@ -470,7 +472,8 @@ html, body {
     clear();
     statusEl.textContent = 'Search: ' + query;
 
-    addLine('<span class="c-amber">Search results for: ' + query + '</span>');
+    var safeQuery = query.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    addLine('<span class="c-amber">Search results for: ' + safeQuery + '</span>');
     addLine('<span class="c-dim">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>');
     addBreak();
 
@@ -485,7 +488,7 @@ html, body {
     });
 
     if (found.length === 0) {
-      addLine('<span class="c-dim">No threads found matching "' + query + '"</span>');
+      addLine('<span class="c-dim">No threads found matching "' + safeQuery + '"</span>');
     } else {
       found.forEach(function (t) {
         addLine('<span class="c-bright">[' + t.id + ']</span> ' + t.title + ' <span class="c-dim">by ' + t.author + '</span>');
@@ -512,7 +515,7 @@ html, body {
         user = 'guest';
         addLine('<span class="c-green">Logged in as guest (read-only)</span>');
       } else {
-        user = val;
+        user = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         addLine('<span class="c-green">Welcome back, ' + user + '.</span>');
       }
       addBreak();
@@ -539,6 +542,7 @@ html, body {
         addLine('<span class="c-cyan">Search for:</span>');
         state = 'search-input';
         prompt.textContent = 'Find:';
+        input.value = '';
         input.focus();
         return;
       }

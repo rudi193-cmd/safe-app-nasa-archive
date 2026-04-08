@@ -4,8 +4,6 @@ db.py -- Database connection abstraction for nasa-archive.
 PostgreSQL-only. All data lives in Postgres under schema nasa_archive.
 Requires WILLOW_DB_URL=postgresql://... in the environment.
 All code calls get_connection() -- never sqlite3.connect() directly.
-
-Mirrors /mnt/c/Users/Sean/Documents/GitHub/Willow/core/db.py pattern.
 """
 import os
 import threading
@@ -14,7 +12,7 @@ DATABASE_URL = os.getenv("WILLOW_DB_URL", "")
 if not DATABASE_URL:
     raise RuntimeError(
         "WILLOW_DB_URL is not set. "
-        "Set it to postgresql://willow:willow@172.26.176.1:5437/willow"
+        "Expected format: postgresql://user:password@host:port/dbname"
     )
 
 SCHEMA = "nasa_archive"
@@ -185,13 +183,16 @@ class _PgConn:
 
 def get_connection(schema=SCHEMA):
     """Return a pooled Postgres connection with search_path set to schema."""
+    from psycopg2 import sql
     pool = _get_pg_pool()
     conn = pool.getconn()
     try:
         conn.autocommit = False
         pg_conn = _PgConn(pool, conn)
         _cur = conn.cursor()
-        _cur.execute(f"SET search_path = {schema}, public")
+        _cur.execute(
+            sql.SQL("SET search_path = {}, public").format(sql.Identifier(schema))
+        )
         _cur.close()
         return pg_conn
     except Exception:
@@ -206,12 +207,15 @@ def get_willow_knowledge_connection():
 
 def init_schema():
     """Create the nasa_archive schema if it does not exist."""
+    from psycopg2 import sql
     pool = _get_pg_pool()
     conn = pool.getconn()
     try:
         conn.autocommit = True
         cur = conn.cursor()
-        cur.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+        cur.execute(
+            sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA))
+        )
         cur.close()
     finally:
         pool.putconn(conn)

@@ -40,7 +40,7 @@ def extract_date_from_slug(slug):
     date_exif (from image file) is preserved separately and never used
     as canonical truth. date_canonical is null until a human sets it.
     """
-    year_m = re.search(r"(199[7-9]|200[0-9]|201[0-9]|2020)", slug)
+    year_m = re.search(r"(19[6-9]\d|20\d{2})", slug)
     month_m = re.search(r"/(0[1-9]|1[0-2])/", slug)
     year = int(year_m.group(1)) if year_m else None
     month = int(month_m.group(1)) if month_m else None

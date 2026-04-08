@@ -19,14 +19,15 @@ import argparse
 from pathlib import Path
 
 # Wire up fleet — need both core dir and parent for relative imports
-WILLOW_ROOT = "/mnt/c/Users/Sean/Documents/GitHub/Willow"
+WILLOW_ROOT = os.environ.get("WILLOW_ROOT", str(Path(__file__).resolve().parent.parent / "Willow"))
 sys.path.insert(0, WILLOW_ROOT)
 sys.path.insert(0, os.path.join(WILLOW_ROOT, "core"))
 import llm_router
 llm_router.load_keys_from_json()
 
-DATA_DIR = Path("/mnt/c/Users/Sean/Documents/GitHub/safe-app-nasa-archive/data/rallies")
-INDEX_PATH = Path("/mnt/c/Users/Sean/Documents/GitHub/safe-app-nasa-archive/web/data/rallies.json")
+_REPO_ROOT = Path(__file__).resolve().parent
+DATA_DIR = _REPO_ROOT / "data" / "rallies"
+INDEX_PATH = _REPO_ROOT / "web" / "data" / "rallies.json"
 
 PROMPT_TEMPLATE = """You are a research librarian specializing in motor scooter culture and rally history in North America and worldwide.
 
@@ -56,7 +57,7 @@ IMPORTANT: Only state facts you're confident about. "null" is better than a gues
 
 
 def load_index():
-    with open(INDEX_PATH) as f:
+    with open(INDEX_PATH, encoding="utf-8") as f:
         data = json.load(f)
     return [
         {
@@ -79,7 +80,8 @@ def needs_enrichment(rally):
     meta_path = DATA_DIR / dir_slug / "meta.json"
     if not meta_path.exists():
         return True
-    meta = json.load(open(meta_path))
+    with open(meta_path, encoding="utf-8") as f:
+        meta = json.load(f)
     # Already enriched if it has a real description or enrichment data
     if meta.get("enriched"):
         return False
@@ -100,7 +102,7 @@ def enrich_one(rally):
         "", "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December",
     ]
-    month_str = month_names[month_num] if month_num else "Unknown"
+    month_str = month_names[month_num] if 1 <= month_num <= 12 else "Unknown"
     url = f"http://scoot.net/gallery/{slug}/" if "/" in slug else ""
 
     prompt = PROMPT_TEMPLATE.format(
@@ -143,7 +145,8 @@ def update_meta(rally, enrichment):
     meta_path = DATA_DIR / dir_slug / "meta.json"
 
     if meta_path.exists():
-        meta = json.load(open(meta_path))
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
     else:
         # Create minimal meta if dir exists but no meta.json
         meta_dir = DATA_DIR / dir_slug
@@ -168,7 +171,7 @@ def update_meta(rally, enrichment):
 
 def update_index(rallies_enriched):
     """Update rallies.json descriptions from enrichment data."""
-    with open(INDEX_PATH) as f:
+    with open(INDEX_PATH, encoding="utf-8") as f:
         index = json.load(f)
 
     lookup = {}

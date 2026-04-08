@@ -147,7 +147,7 @@ def scrape_wayback_thread(timestamp, original_url):
     wayback_url = f"{WAYBACK_BASE}/{timestamp}/{original_url}"
     try:
         r = requests.get(wayback_url, headers=HEADERS, timeout=30)
-        if r.status_code \!= 200:
+        if r.status_code != 200:
             return None, wayback_url
 
         soup = BeautifulSoup(r.text, "html.parser")

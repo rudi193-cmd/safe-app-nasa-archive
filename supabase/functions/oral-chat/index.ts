@@ -42,9 +42,18 @@ When you have enough information, you can say: "Want me to save that story to th
 Keep replies short (2-4 sentences). Ask one follow-up question at a time.`;
 
 Deno.serve(async (req: Request) => {
-  // CORS headers
+  // CORS headers — allow configurable origin for local dev
+  const allowedOrigins = [
+    'https://nasa-archive-site.pages.dev',
+    'http://localhost:4321',
+    'http://localhost:3000',
+  ];
+  const reqOrigin = req.headers.get('Origin') ?? '';
+  const corsOrigin = allowedOrigins.includes(reqOrigin)
+    ? reqOrigin
+    : 'https://nasa-archive-site.pages.dev';
   const corsHeaders = {
-    'Access-Control-Allow-Origin': 'https://nasa-archive-site.pages.dev',
+    'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
@@ -118,6 +127,7 @@ Deno.serve(async (req: Request) => {
         max_tokens: 300,
         temperature: 0.7,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!groqRes.ok) {

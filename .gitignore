@@ -13,3 +13,6 @@ target/
 .dev.vars*
 !.dev.vars.example
 !.env.example
+credentials.json
+*.key
+*.pem
